@@ -2,44 +2,30 @@
 
 # This file stores functions for building applications
 dockerImg="tony57/cde"
+buildCmd="bash build-tools/common-build-flow.sh"
+dockerPublishList=()
 
-# Common pre-build tasks
-commonDockerPreBuild() {
-	echo "Build flow with Docker starts"
-	prepareBuildDocker
-	startDockerBuilder
-}
 
-commonNoDockerBuild() {
-	if [[ "$1" = "local" ]]; then
-		echo "Local build flow without Docker starts"
-		userBuildLocal
-	else
-		echo "Deployment build flow without Docker starts"
-		userBuild
-	fi
-}
-
-# Common post-build tasks
-commonDockerPostBuild() {
-	echo "Stopping Docker builder..."
-	stopDockerBuilder
-}
-
-# Common build flow
+# Entry point
 commonBuild() {
 	# The variable BUILD_WITH_DOCKER specifies the way to build
 	if [[ -z "${BUILD_WITH_DOCKER}" ]]; then
 		commonNoDockerBuild
 	else
-		commonDockerPreBuild
-		buildInDocker
-		commonDockerPostBuild
+		commonDockerBuild
 	fi
+
+	publishArtifact
 }
 
-# Functions for building on a docker container
-prepareBuildDocker() {
+# Building locally
+commonNoDockerBuild() {
+	echo "Local build flow without Docker starts"
+	$buildCmd
+}
+
+# Building in a docker container
+commonDockerBuild() {
 	checkCde=$(docker images | grep $(dockerImg))
 	version="latest"
 	if [[ $? != 0 ]]; then
@@ -51,25 +37,31 @@ prepareBuildDocker() {
 		echo "Build docker not exists. Pulling from repo..."
 		docker pull $dockerImg:$version
 	fi
-}
 
-# Start a docker container with shared directory to store output
-startDockerBuilder () {
+	echo "Local build flow with Docker starts"
+
 	docker run --name localBuild -v $(pwd):/opt/tony57 --env MODULE_DIR=${MODULE_DIR} --env  $dockerImg tail -f /dev/null
-}
 
-buildInDocker () {
-	docker exec localBuild bash build-tools/common-build-docker.sh
-}
+	docker exec localBuild $buildCmd
 
-stopDockerBuilder () {
 	docker rm -f localBuild
 }
 
-# Publish Docker to remote repository
+# State that a docker image needs to be published
 publishDocker () {
+	echo "Publish $1"
+}
+
+publishArtifact () {
+	if [[ ! -z $(command -v docker) ]]; then
+		doPublishDocker
+	fi
+}
+
+# Publish docker image to remote repository
+doPublishDocker () {
 	# By default we build latest docker
-	docker tag $1:latest tony57/$1:$2
+	docker tag $1:latest tony57/$1:latest
 	docker image push tony57/$1:$2
 }
 
@@ -79,11 +71,13 @@ echo "Start build script"
 curDir=$(pwd)
 MODULE_DIR=$(pwd)/${curDir##*/}
 
+echo ${MODULE_DIR}
+
 # Get project's build configurations
 if [ -f buildConfig.sh ]; then
 	source buildConfig.sh
 else
-	echo "build.sh not found in parent directory"
+	echo "buildConfig.sh not found in parent directory"
 	exit 1
 fi
 
