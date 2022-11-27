@@ -2,9 +2,11 @@
 
 # This file stores functions for building applications
 dockerImg="tony57/cde"
-buildCmd="bash build-tools/common-build-flow.sh"
+buildCmd="source build-tools/common-build-flow.sh"
+dockerBuilderName="localBuilder"
 dockerPublishList=()
-
+ok=1
+failReason=""
 
 # Entry point
 commonBuild() {
@@ -15,7 +17,11 @@ commonBuild() {
 		commonDockerBuild
 	fi
 
-	publishArtifact
+	commonTest
+
+	if [[ ! -z "${ENABLE_PUBLISH}"  ]]; then
+		publishArtifact
+	fi
 }
 
 # Building locally
@@ -34,22 +40,52 @@ commonDockerBuild() {
 	elif [[ $checkCde ]]; then
 		echo "Build docker already exists. Skip pulling."
 	else
-		echo "Build docker not exists. Pulling from repo..."
+		echo "Build docker does not exists. Pulling from repo..."
 		docker pull $dockerImg:$version
 	fi
 
 	echo "Local build flow with Docker starts"
 
-	docker run --name localBuild -v $(pwd):/opt/tony57 --env MODULE_DIR=${MODULE_DIR} --env  $dockerImg tail -f /dev/null
+	echo "Start container..."
+	docker run \
+	--name $dockerBuilderName \
+	-v $(pwd):/opt/tony57 \
+	-v /var/run/docker.sock:/var/run/docker.sock
+	--env MODULE_DIR=${MODULE_DIR} \
+	$dockerImg tail -f /dev/null
 
-	docker exec localBuild $buildCmd
+	echo "Build starts now on Docker"
+	docker exec $dockerBuilderName $buildCmd
 
-	docker rm -f localBuild
+	docker rm -f $dockerBuilderName
+}
+
+# Run module-specific tests
+commonTest () {
+	echo -e "\nStart running tests\n"
+	userTest
+	validateTestResult
+}
+
+# Check test results by probing test_details*.xml
+validateTestResult () {
+	echo "Validating test reports..."
+	for f in $(find . -name test_detail*.xml); do
+		totalTestCnt=$(head -n 1 $f | cut -d "\"" -f 2)
+		failCnt=$(cat $f | grep -c failure)
+		if [[ failCnt -ne "0" ]]; then
+			echo "In $(basename $f), $failCnt out of $totalTestCnt tests fail"
+			ok=0
+			failReason="low pass rate in tests"
+		else
+			echo "$(basename $f) has pass rate 100%"
+		fi
+	done
 }
 
 # State that a docker image needs to be published
 publishDocker () {
-	echo "Publish $1"
+	dockerPublishList+=("$1")
 }
 
 publishArtifact () {
@@ -61,17 +97,16 @@ publishArtifact () {
 # Publish docker image to remote repository
 doPublishDocker () {
 	# By default we build latest docker
-	docker tag $1:latest tony57/$1:latest
-	docker image push tony57/$1:$2
+	for img in "${dockerPublishList[@]}"; do
+		echo "Publish $img to remote repository"
+		docker tag $img:latest tony57/$img:latest
+		docker image push tony57/$img:latest
+	done
 }
 
-# Actual build flow here
-echo "Start build script"
-
+# Actual build flow
 curDir=$(pwd)
 MODULE_DIR=$(pwd)/${curDir##*/}
-
-echo ${MODULE_DIR}
 
 # Get project's build configurations
 if [ -f buildConfig.sh ]; then
@@ -81,7 +116,19 @@ else
 	exit 1
 fi
 
-# The build flow is started here
-commonBuild
+if [[ $1 ]]; then
+	echo "Run target $1"
+	$1
+else
+	echo "No target specified. Run full build flow"
+	# The build flow is started here
+	commonBuild
+fi
 
-echo "Build suceeds"
+echo ""
+
+if [[ $ok -gt 0 ]]; then
+	echo "Build successful"
+else
+	echo "Build fails due to $failReason"
+fi

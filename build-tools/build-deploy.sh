@@ -1,3 +1,5 @@
 #!/bin/bash
 
-./build-tools/common-build.sh "deploy"
+ENABLE_PUBLISH=1
+
+source build-tools/common-build.sh $@

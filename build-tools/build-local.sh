@@ -1,3 +1,3 @@
 #!/bin/bash
 
-./build-tools/common-build.sh "local"
+source build-tools/common-build.sh $@
