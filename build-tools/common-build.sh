@@ -3,10 +3,18 @@
 # This file stores functions for building applications
 dockerImg="tony57/cde"
 buildCmd="source build-tools/common-build-flow.sh"
+testCmd="source build-tools/common-test-flow.sh"
 dockerBuilderName="localBuilder"
 dockerPublishList=()
 ok=1
 failReason=""
+
+# Build flow management
+# Input: Reason to fail the build
+failBuild () {
+	ok=0
+	failReason=$1
+}
 
 # Entry point
 commonBuild() {
@@ -17,7 +25,7 @@ commonBuild() {
 		commonDockerBuild
 	fi
 
-	commonTest
+	$testCmd
 
 	if [[ ! -z "${ENABLE_PUBLISH}"  ]]; then
 		publishArtifact
@@ -58,29 +66,6 @@ commonDockerBuild() {
 	docker exec $dockerBuilderName $buildCmd
 
 	docker rm -f $dockerBuilderName
-}
-
-# Run module-specific tests
-commonTest () {
-	echo -e "\nStart running tests\n"
-	userTest
-	validateTestResult
-}
-
-# Check test results by probing test_details*.xml
-validateTestResult () {
-	echo "Validating test reports..."
-	for f in $(find . -name test_detail*.xml); do
-		totalTestCnt=$(head -n 1 $f | cut -d "\"" -f 2)
-		failCnt=$(cat $f | grep -c failure)
-		if [[ failCnt -ne "0" ]]; then
-			echo "In $(basename $f), $failCnt out of $totalTestCnt tests fail"
-			ok=0
-			failReason="low pass rate in tests"
-		else
-			echo "$(basename $f) has pass rate 100%"
-		fi
-	done
 }
 
 # State that a docker image needs to be published
