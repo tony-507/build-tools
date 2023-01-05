@@ -19,8 +19,8 @@ commonTest () {
 validateTestResult () {
 	echo "Validating test reports..."
 	for f in $(find . -name test_detail*.xml); do
-		totalTestCnt=$(head -n 1 $f | cut -d "\"" -f 2)
-		failCnt=$(cat $f | grep -c failure)
+		totalTestCnt=$(grep failures $f | sed 's/.*tests="\([0-9]*\)".*/\1/' | paste -sd+ - | bc)
+		failCnt=$(grep failures $f | sed 's/.*failures="\([0-9]*\)".*/\1/' | paste -sd+ - | bc)
 		if [[ failCnt -ne "0" ]]; then
 			echo "In $(basename $f), $failCnt out of $totalTestCnt tests fail"
 			ok=0
