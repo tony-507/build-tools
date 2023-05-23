@@ -2,8 +2,7 @@
 
 # This file stores functions for building applications
 dockerImg="tony57/cde"
-buildCmd="source build-tools/common-build-flow.sh"
-testCmd="source build-tools/common-test-flow.sh"
+targetCmd="source build-tools/common-build-targets.sh"
 dockerBuilderName="localBuilder"
 dockerPublishList=()
 ok=1
@@ -25,7 +24,7 @@ commonBuild() {
 		commonDockerBuild
 	fi
 
-	$testCmd
+	$targetCmd "test"
 
 	if [[ ! -z "${ENABLE_PUBLISH}"  ]]; then
 		publishArtifact
@@ -35,7 +34,8 @@ commonBuild() {
 # Building locally
 commonNoDockerBuild() {
 	echo "Local build flow without Docker starts"
-	$buildCmd
+	$targetCmd "init"
+	$targetCmd "build"
 }
 
 # Building in a docker container
@@ -63,7 +63,8 @@ commonDockerBuild() {
 	$dockerImg tail -f /dev/null
 
 	echo "Build starts now on Docker"
-	docker exec $dockerBuilderName $buildCmd
+	docker exec $dockerBuilderName $targetCmd "init"
+	docker exec $dockerBuilderName $targetCmd "build"
 
 	docker rm -f $dockerBuilderName
 }

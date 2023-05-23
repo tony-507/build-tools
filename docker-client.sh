@@ -18,7 +18,7 @@ buildStartCmd () {
 	done
 
 	cmd+="$1 tail -f /dev/null 2>/dev/null"
-	debug_echo $cmd
+	debug_log $cmd
 	resetDefault
 }
 
@@ -35,7 +35,7 @@ startInstance () {
 	cmd=$(buildStartCmd $1)
 	debug_log "Built Docker command: $cmd"
 	id=$($cmd)
-	debug_echo $id
+	debug_log $id
 }
 
 # @Public Remove a Docker container instance
